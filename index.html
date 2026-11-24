@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cap Chase 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;700;800&display=swap">
+<style>
+/* Layout: the 3D world fills the window; a transparent 2D canvas on top holds the HUD;
+   storybook cards sit over both for menus. Single warm picture-book look, no dark theme. */
+:root {
+  --ink: #3a2e28; --paper: #f4e7c9; --paper-2: #e9d7ae;
+  --cap-red: #b8432f; --cap-blue: #3d6a9e;
+  --display: "Fredoka", "Trebuchet MS", "Segoe UI", sans-serif;
+  --body: "Nunito", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }   /* without this, display:flex below would beat the hidden attribute */
+html, body { height: 100%; margin: 0; overflow: hidden; background: #bcd9e6; color: var(--ink); }
+body { font-family: var(--body); }
+#world, #hud { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#hud { pointer-events: none; }
+.overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(45, 35, 25, .38); z-index: 5; padding-block: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.overlay.clear { background: transparent; align-items: flex-end; padding-bottom: 40px; }
+.card {
+  background: var(--paper); border: 3px solid var(--ink); border-radius: 22px; box-shadow: 0 8px 0 var(--ink);
+  width: min(600px, 100%); padding: 26px 30px 28px; max-height: calc(100% - 20px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.card h1, .card h2 { font-family: var(--display); margin: 0; line-height: 1.05; text-wrap: balance; }
+.card h1 { font-size: clamp(34px, 6vw, 52px); color: var(--cap-red); }
+.card h2 { font-size: clamp(26px, 4vw, 36px); }
+.eyebrow { font-family: var(--display); font-weight: 600; text-transform: uppercase; letter-spacing: 2px; font-size: 13px; color: var(--cap-blue); margin: 0; }
+.card p { margin: 0; font-size: 18px; line-height: 1.5; }
+.btns { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+button.big {
+  font-family: var(--display); font-weight: 600; font-size: 22px; color: #fff8e8; background: var(--cap-red);
+  border: 3px solid var(--ink); border-radius: 16px; padding: 10px 26px 12px; box-shadow: 0 5px 0 var(--ink); cursor: pointer;
+}
+button.big.plain { background: var(--paper-2); color: var(--ink); }
+button.big:hover { filter: brightness(1.07); }
+button.big:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--ink); }
+button:focus-visible { outline: 3px solid var(--cap-blue); outline-offset: 3px; }
+.places { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.place {
+  font-family: var(--display); text-align: left; cursor: pointer; color: var(--ink);
+  background: #fffaf0; border: 3px solid var(--ink); border-radius: 16px; padding: 10px 12px 12px;
+  display: flex; flex-direction: column; gap: 2px; box-shadow: 0 4px 0 var(--ink);
+}
+.place:hover:not([disabled]) { background: #fff3d6; }
+.place[disabled] { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.place .pn { font-weight: 600; font-size: 19px; }
+.place .pl { font-family: var(--body); font-size: 14px; }
+.place .ps { font-family: var(--body); font-size: 13px; color: var(--cap-blue); font-weight: 800; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 15px; align-items: center; }
+kbd { font-family: var(--display); font-weight: 600; font-size: 14px; background: #fffaf0; border: 2px solid var(--ink); border-bottom-width: 4px; border-radius: 8px; padding: 1px 8px; white-space: nowrap; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.stat { background: #fffaf0; border: 2px solid var(--ink); border-radius: 14px; padding: 8px 12px; }
+.stat b { display: block; font-family: var(--display); font-size: 26px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+.corner-btns { position: fixed; z-index: 4; display: flex; gap: 8px; top: calc(14px + env(safe-area-inset-top, 0px)); right: max(14px, env(safe-area-inset-right, 0px)); }
+.corner-btns button { font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--ink); cursor: pointer; background: var(--paper); border: 2px solid var(--ink); border-radius: 12px; padding: 5px 12px; box-shadow: 0 3px 0 var(--ink); }
+#loadError { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--display); font-size: 20px; padding: 24px; text-align: center; }
+@media (prefers-reduced-motion: reduce) { button.big:active { transform: none; } }
+</style>
+</head>
+<body>
+
+<canvas id="world" aria-label="Cap Chase 3D game"></canvas>
+<canvas id="hud"></canvas>
+<div id="loadError" hidden>The 3D engine didn't load. Check the internet connection and refresh the page.</div>
+
+<div class="corner-btns">
+  <button id="muteBtn" type="button">Sound: on</button>
+  <button id="pauseBtn" type="button" hidden>Pause</button>
+</div>
+
+<div class="overlay" id="titleScreen" hidden>
+  <div class="card">
+    <p class="eyebrow">A bicycle adventure inspired by <i>Caps for Sale</i></p>
+    <h1>Cap Chase 3D</h1>
+    <p>Ride right behind the peddler! Ten cheeky monkeys took his caps. Chase each one down and stack every cap back on his head.</p>
+    <div class="places" id="placeList"></div>
+    <div class="keys">
+      <kbd>&uarr;</kbd><span>Pedal forward (or W)</span>
+      <kbd>&larr; &rarr;</kbd><span>Steer left and right (or A, D)</span>
+      <kbd>&darr;</kbd><span>Brake and back up (or S)</span>
+      <kbd>Space</kbd><span>Hop. In the air off a ramp, press again to spin!</span>
+      <kbd>X</kbd><span>Hold in the air for a no-hands trick</span>
+      <kbd>B</kbd><span>Ring your bell. Nearby monkeys freeze for a moment.</span>
+    </div>
+  </div>
+</div>
+
+<div class="overlay clear" id="storyScreen" hidden>
+  <div class="card">
+    <p class="eyebrow" id="storyEyebrow">Place 1</p>
+    <h2 id="storyTitle">A nap under the big old tree</h2>
+    <p id="storyText"></p>
+    <div class="btns"><button class="big" id="wakeBtn" type="button">Wake up!</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="winScreen" hidden>
+  <div class="card">
+    <p class="eyebrow" id="winEyebrow">The Village Green</p>
+    <h2>All 10 caps are back!</h2>
+    <div class="stats">
+      <div class="stat"><b id="statScore">0</b><span>Score</span></div>
+      <div class="stat"><b id="statTricks">0</b><span>Tricks landed</span></div>
+      <div class="stat"><b id="statTime">0:00</b><span>Time</span></div>
+    </div>
+    <p id="winBest"></p>
+    <div class="btns">
+      <button class="big" id="nextBtn" type="button">Next place</button>
+      <button class="big plain" id="againBtn" type="button">Play again</button>
+      <button class="big plain" id="menuBtn" type="button">All places</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="endScreen" hidden>
+  <div class="card">
+    <p class="eyebrow">The end</p>
+    <h1>Every cap is home!</h1>
+    <p>The peddler pedaled home with every single cap stacked tall on his head. From now on, he takes his naps indoors.</p>
+    <p id="endTotal"></p>
+    <div class="btns"><button class="big" id="endMenuBtn" type="button">Back to the map</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="pauseScreen" hidden>
+  <div class="card">
+    <h2>Paused</h2>
+    <p>The monkeys are waiting. Take your time.</p>
+    <div class="btns">
+      <button class="big" id="resumeBtn" type="button">Keep riding</button>
+      <button class="big plain" id="quitBtn" type="button">All places</button>
+    </div>
+  </div>
+</div>
+
+<!-- Load order matters: each file uses things defined by the files above it.
+     three.js (the 3D engine) -> sound -> places -> rules -> 3D view -> HUD -> main loop. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>if (!window.THREE) document.getElementById('loadError').hidden = false;</script>
+<script src="js/sound.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/rules.js"></script>
+<script src="js/world3d.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/main.js"></script>
+<p style="position:fixed;bottom:6px;left:12px;margin:0;font-size:12px;z-index:3"><a href="classic.html" style="color:#3a2e28">Play the original top-down version</a></p>
+</body>
+</html>
