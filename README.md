@@ -30,10 +30,14 @@ All art, characters and words in the game are original. Nothing is copied from t
 | X (hold, in the air) | No-hands trick |
 | B | Ring the bell: nearby monkeys freeze for about a second |
 | P or Esc | Pause |
-| M | Sound on/off |
+| M | Sound effects on/off |
+| N | Music on/off |
 
 The big arrow at the bottom points to the nearest monkey. If a canal or creek is in the way,
 it points to the best bridge instead and says "Use the bridge!"
+
+Ramps only work from the front: follow the yellow arrows painted on the ground. The back and sides
+of a ramp are solid, so you bump off them instead of riding through.
 
 ## Places
 
@@ -42,6 +46,33 @@ it points to the best bridge instead and says "Use the bridge!"
 3. **Harbor Point**: lighthouse, pier, fishing boats, a creek to jump
 
 Finishing a place unlocks the next. Best scores are saved in the browser.
+
+## Music and sounds
+
+Everything you hear is made in code with the Web Audio API, so there are no sound files.
+
+- **Music:** each place has its own original folk tune. The Village Green has a waltz on tin whistle,
+  Market Town has an accordion polka, and Harbor Point has a sea shanty. The tune dips when the
+  win fanfare plays. The Music button (or N) turns it off without silencing the effects.
+- **Monkeys:** they chatter "ooh ooh ah ah" when they tease, squeal when they start running, pant
+  when tired, and grumble when you take a cap.
+- **Bike:** a soft chain tick that speeds up with you, a quiet tire hiss on hard turns, and wind rushing past in the air.
+- **Places:** songbirds and a creaky windmill, a clock tower that chimes and a splashing fountain,
+  gulls and waves at the harbor. Sounds get quieter with distance.
+- **Cheers:** a jingle as each cap lands on the stack, a crowd cheer for big tricks, and a horn fanfare at the end.
+
+## Animations
+
+- The peddler's legs pedal (only while you hold Up, so he coasts like a real bike), the wheels
+  roll, and his arms flap in a no-hands trick.
+- The cap stack is a wobbly spring: it leans out on turns, rocks back when you speed up, bounces
+  on landings and sways gently even when you stand still. The taller it grows, the floppier it gets,
+  like a tall pole: a few caps barely tip, a full stack of ten really leans and sways.
+- Monkeys wave both arms when they tease, pump their arms when they run, see stars when they're
+  tired or frozen by the bell, and slump off when they lose a cap.
+- Caps fly back with a sparkly trail. Tricks set off confetti. Tires kick up dust, and water splashes.
+- Birds peck on the ground, fly off when you (or a running monkey) get close, and come back later.
+- Flags fly on the landmarks, stalls and boats, and laundry flaps behind the houses.
 
 ## Scoring
 
@@ -59,9 +90,11 @@ Each file has one job. They load in this order, and each one uses things from th
 | --- | --- |
 | `index.html` | The page: menu cards, styles, and the list of scripts |
 | `js/sound.js` | Sound effects, made from scratch with the Web Audio API |
+| `js/music.js` | The three tunes (written as plain note lists) and the player that schedules them |
 | `js/levels.js` | The three places, as plain data. Edit this to move a tree or add a place |
 | `js/rules.js` | How the game works: steering, ramps, tricks, monkey brains, catching. Draws nothing |
-| `js/world3d.js` | Builds the 3D models with Three.js and moves the camera |
+| `js/ambience.js` | Sounds that keep going: chain ticks, skids, wind, birds, waves, chimes |
+| `js/world3d.js` | Builds the 3D models with Three.js, animates them (legs, wobbly stack, birds, flags, confetti) and moves the camera |
 | `js/hud.js` | The flat layer on top: caps counter, score, mini-map, compass, speech bubbles |
 | `js/main.js` | Keyboard, menus, saving progress, and the frame loop |
 
@@ -88,6 +121,9 @@ Then open http://localhost:8796/. Keep the source files plain ASCII: some server
 - **Difficulty:** each place in `js/levels.js` has `monkeySpeed` (the bike tops out at 320), `fleeR`
   (how close you get before they run), `energy` (seconds they run before tiring), and `dodge`
   (chance of a sidestep). Steering feel is at the top of `js/rules.js`.
+- **Changing a tune:** each song in `js/music.js` is a list of bars like `['G', 'B4:2 D5:2 B4:2']`:
+  a chord, then notes with their length in eighth notes. If a bar's lengths don't add up, the
+  browser console says which bar.
 - **Adding a place:** add one object to `LEVELS` in `js/levels.js`, with a `bigTree(x, y)` for the
   nap. Any kind of thing already used (trees, houses, stalls, water, bridges, ramps...) just works.
   A brand-new kind needs a solid rule in `prepareLevel` (rules.js) and a builder in `BUILD` (world3d.js).

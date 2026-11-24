@@ -48,6 +48,8 @@ const Hooks = {
   capLanded(f) {},           // a flying cap reached the top of the stack
   monkeyGone(m) {},          // a cap-less monkey has wandered off for good
   levelComplete() {},        // all ten caps are back
+  trickLanded(pts) {},       // a trick scored points (confetti!)
+  splash(x, y) {},           // the bike rode into water
   onScreen(x, y, h) { return true; }   // can the player see this spot? (only plays tsz-tsz for visible monkeys)
 };
 
@@ -60,7 +62,7 @@ const P = {};            // the peddler
 const keys = {};         // which keys are held down right now
 let monkeys = [], popups = [], particles = [], bubbles = [], flyingCaps = [];
 let score = 0, tricks = 0, bestTrick = null, levelTime = 0;
-let wakeT = 0, controlDelay = 0, winT = -1, hintT = 0, tszCooldown = 0, bellRingT = -1;
+let wakeT = 0, controlDelay = 0, winT = -1, hintT = 0, tszCooldown = 0, voiceCD = 0, bellRingT = -1;
 
 // Turn a place's list of things into the lists the rules use.
 // "top" is how tall a solid thing is: if the bike is higher than that, it sails over.
@@ -138,6 +140,7 @@ function scatterMonkeys() {
     m.vx = Math.cos(m.dir) * 300; m.vy = Math.sin(m.dir) * 300;
   }
   P.asleep = false;
+  sfx.squeal(); setTimeout(() => sfx.chatter(), 250);
   phase = 'play'; controlDelay = 0.6; hintT = 8;
   addPopup(P.x, P.y, 110, 'Get those caps back!', '#b8432f', 2);
 }
@@ -256,13 +259,42 @@ function updatePeddler(dt) {
   }
 
   collide(P, PLAYER_R, P.z, (s, hit) => {
-    if (s.water) { if (P.splashCD <= 0) { sfx.splash(); P.splashCD = 0.6; for (let i = 0; i < 12; i++) addParticle(P.x, P.y, '#cfe6ee', 1.5); } }
+    if (s.water) { if (P.splashCD <= 0) { sfx.splash(); P.splashCD = 0.6; Hooks.splash(P.x, P.y); for (let i = 0; i < 12; i++) addParticle(P.x, P.y, '#cfe6ee', 1.5); } }
     else if (hit > 140 && P.bumpCD <= 0) { sfx.bonk(); P.bumpCD = 0.4; }
   });
+  rampWalls(fx, fy);
   // After bumping into something, keep only the part of the motion along the handlebars.
   P.speed = P.vx * fx + P.vy * fy;
   P.x = clamp(P.x, 30, L.w - 30); P.y = clamp(P.y, 30, L.h - 30);
   P.bellCD = Math.max(0, P.bellCD - dt); P.bumpCD -= dt; P.splashCD -= dt;
+}
+
+// A ramp is only open from the front. Ride at it from the back or the sides and it's a
+// wall, as tall as the ramp's high end. Facing up the ramp means you're using it the right
+// way (you launch, or roll over it if you're too slow), so the walls only stop a bike
+// that ISN'T facing up the ramp. Only the bike is blocked: monkeys can still scamper over.
+// Each ramp is turned to face up, down, left or right, so its box lines up with the map.
+function rampWalls(fx, fy) {
+  if (P.z >= RAMP_H) return;   // high enough to sail over
+  for (const r of L.ramps) {
+    const ca = Math.cos(r.a), sa = Math.sin(r.a);
+    if (fx * ca + fy * sa > 0.35) continue;   // facing up this ramp: let it through
+    // The bike's position in the ramp's own frame: lx runs up the slope, ly across it.
+    const dx = P.x - r.x, dy = P.y - r.y;
+    const lx = dx * ca + dy * sa, ly = -dx * sa + dy * ca;
+    const penX = RAMP_L / 2 + PLAYER_R - Math.abs(lx), penY = RAMP_W / 2 + PLAYER_R - Math.abs(ly);
+    if (penX <= 0 || penY <= 0) continue;   // not touching
+    // Leave by whichever side is closest, then turn that push back into map directions.
+    let nlx = 0, nly = 0, pen;
+    if (penX < penY) { nlx = Math.sign(lx) || 1; pen = penX; } else { nly = Math.sign(ly) || 1; pen = penY; }
+    const nx = nlx * ca - nly * sa, ny = nlx * sa + nly * ca;
+    P.x += nx * pen; P.y += ny * pen;
+    const vn = P.vx * nx + P.vy * ny;      // speed going INTO the ramp
+    if (vn < 0) {
+      P.vx -= vn * nx * 1.3; P.vy -= vn * ny * 1.3;
+      if (-vn > 140 && P.bumpCD <= 0) { sfx.bonk(); P.bumpCD = 0.4; }
+    }
+  }
 }
 
 // Scoring happens on landing, so a trick only counts if you finish it.
@@ -285,6 +317,8 @@ function land() {
     if (!bestTrick || pts > bestTrick.pts) bestTrick = { pts, label: parts.join(' + ') };
     addPopup(P.x, P.y, wobble ? 130 : 110, parts.join(' + ') + '  +' + pts, '#3d6a9e', 1.6);
     sfx.trick();
+    if (pts >= 175) sfx.cheer();   // the crowd goes wild for the big ones
+    Hooks.trickLanded(pts);
   }
   P.fromRamp = false;
 }
@@ -334,6 +368,8 @@ function updateMonkey(m, dt) {
     m.dodgeCD -= dt; m.tauntCD -= dt;
     if (m.dazed > 0) { m.dazed -= dt; speed = 0; }
     else if (d < L.fleeR) {
+      // A squeal when it first notices you (only for monkeys you can see, and not too often).
+      if (!m.fleeing) { m.fleeing = true; if (voiceCD <= 0 && Hooks.onScreen(m.x, m.y, 30)) { sfx.squeal(); voiceCD = 1.2; } }
       // Run away, zig-zagging a little so it's not a straight line.
       const ax = px / d, ay = py / d, j = Math.sin(m.t * 2.6 + m.seed) * 0.6;
       dx = ax - ay * j; dy = ay + ax * j;
@@ -344,10 +380,11 @@ function updateMonkey(m, dt) {
       else {
         speed = L.monkeySpeed * (m.dodgeT > 0 ? 1.4 : 1);
         m.energy -= dt;
-        if (m.energy <= 0) { m.tired = 2.4; addBubble(m, 'Huff, puff!', 1); }
+        if (m.energy <= 0) { m.tired = 2.4; addBubble(m, 'Huff, puff!', 1); if (Hooks.onScreen(m.x, m.y, 30)) sfx.pant(); }
       }
     } else {
       // Wander and tease.
+      m.fleeing = false;
       m.wanderT -= dt;
       if (m.wanderT <= 0) { m.wanderA += (Math.random() - 0.5) * 2.5; m.wanderT = 1 + Math.random() * 2; }
       dx = Math.cos(m.wanderA); dy = Math.sin(m.wanderA); speed = 55;
@@ -355,8 +392,10 @@ function updateMonkey(m, dt) {
       if (m.tired > 0) m.tired -= dt;
       if (m.tauntCD <= 0 && d < 700) {
         m.tauntCD = 4 + Math.random() * 5; m.vz = 160;
-        addBubble(m, ['Tsz tsz tsz!', 'Tsz tsz!', 'Catch me!', 'Nice cap, huh?', 'Too slow!'][Math.floor(Math.random() * 5)], 1.4);
-        if (tszCooldown <= 0 && Hooks.onScreen(m.x, m.y, 30)) { sfx.tsz(); tszCooldown = 1.5; }
+        const say = ['Tsz tsz tsz!', 'Tsz tsz!', 'Catch me!', 'Nice cap, huh?', 'Too slow!', 'Ooh ooh ah ah!'][Math.floor(Math.random() * 6)];
+        addBubble(m, say, 1.4);
+        // "Tsz tsz" is the monkeys' sound in the book; everything else gets monkey chatter.
+        if (tszCooldown <= 0 && Hooks.onScreen(m.x, m.y, 30)) { if (say[0] === 'T') sfx.tsz(); else sfx.chatter(); tszCooldown = 1.5; }
       }
     }
     const [ax, ay] = avoidance(m); dx += ax; dy += ay;
@@ -380,7 +419,7 @@ function catchMonkey(m) {
   addBubble(m, ['Hey!', 'Aww!', 'My cap!', 'No fair!'][Math.floor(Math.random() * 4)], 1.2);
   addPopup(m.x, m.y, 70, 'Cap ' + P.caps + ' of ' + CAPS_PER_LEVEL + '!  +100', '#b8432f', 1.3);
   for (let i = 0; i < 14; i++) addParticle(m.x, m.y, ['#f4d35e', '#fff2c2', m.cap][i % 3], 1.3);
-  sfx.cap(P.caps);
+  sfx.cap(P.caps); sfx.grumble();
   if (P.caps === CAPS_PER_LEVEL) winT = 1.8;
 }
 
@@ -443,14 +482,14 @@ function addParticle(x, y, color, power = 1) {
 function update(dt) {
   clock += dt;
   if (phase === 'paused' || phase === 'title') return;
-  tszCooldown -= dt;
+  tszCooldown -= dt; voiceCD -= dt;
   if (phase === 'story') {
     for (const m of monkeys) m.t += dt;
   } else if (phase === 'wake') {
     wakeT += dt;
     for (const m of monkeys) m.t += dt;
     if (wakeT > 0.7 && wakeT - dt <= 0.7) addBubble({ x: P.x, y: P.y, z: 30, isPeddler: true }, 'My caps!', 1.6);
-    if (wakeT > 1.6 && wakeT - dt <= 1.6) { sfx.tsz(); monkeys.forEach((m, i) => { if (i % 2 === 0) addBubble(m, 'Tsz tsz tsz!', 1.4); }); }
+    if (wakeT > 1.6 && wakeT - dt <= 1.6) { sfx.tsz(); setTimeout(() => sfx.chatter(), 450); monkeys.forEach((m, i) => { if (i % 2 === 0) addBubble(m, 'Tsz tsz tsz!', 1.4); }); }
     if (wakeT > 3.0) scatterMonkeys();
   } else if (phase === 'play' || phase === 'won') {
     if (phase === 'play') { levelTime += dt; controlDelay -= dt; hintT -= dt; }
@@ -462,7 +501,7 @@ function update(dt) {
   }
   for (const f of flyingCaps) {
     f.t += dt * 2;
-    if (f.t >= 1 && !f.done) { f.done = true; P.stackShown++; sfx.pop(); Hooks.capLanded(f); }
+    if (f.t >= 1 && !f.done) { f.done = true; P.stackShown++; sfx.stack(P.stackShown); Hooks.capLanded(f); }
   }
   flyingCaps = flyingCaps.filter(f => !f.done);
   for (const p of popups) p.t += dt;

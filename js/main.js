@@ -5,9 +5,9 @@
    runs every frame: update the rules, sync the 3D models, draw the HUD.
    ===================================================================== */
 
-// When a place starts, build its 3D scenery AND its mini-map.
+// When a place starts: build its 3D scenery and mini-map, and switch to its tune.
 const buildScenery = Hooks.levelStart;
-Hooks.levelStart = () => { buildScenery(); buildMinimap(); };
+Hooks.levelStart = () => { buildScenery(); buildMinimap(); Music.play(levelIndex % SONGS.length); Ambience.reset(); };
 
 // ---------- Keyboard ----------
 const GAME_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyX', 'KeyB'];
@@ -25,6 +25,7 @@ window.addEventListener('keydown', e => {
     if (e.code === 'KeyP' || e.code === 'Escape') pause();
   } else if (phase === 'paused' && (e.code === 'KeyP' || e.code === 'Escape')) resume();
   if (e.code === 'KeyM') toggleMute();
+  if (e.code === 'KeyN') toggleMusic();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (phase === 'play') pause(); });
@@ -82,6 +83,7 @@ Hooks.levelComplete = () => {
   progress.best[levelIndex] = Math.max(progress.best[levelIndex] || 0, score);
   progress.unlocked = Math.max(progress.unlocked, Math.min(LEVELS.length, levelIndex + 2));
   saveProgress();
+  Music.duck(4);   // quiet the tune so the fanfare can be heard
   $('winEyebrow').textContent = L.name;
   $('statScore').textContent = score.toLocaleString();
   $('statTricks').textContent = tricks;
@@ -103,6 +105,13 @@ function toggleMute() {
   try { localStorage.setItem('cap-chase-muted', Sound.muted ? '1' : '0'); } catch (e) { }
 }
 try { if (localStorage.getItem('cap-chase-muted') === '1') { Sound.muted = true; $('muteBtn').textContent = 'Sound: off'; } } catch (e) { }
+// Music has its own switch, so the kids can keep the sound effects and lose the tune (or the other way round).
+function toggleMusic() {
+  Sound.setMusicMuted(!Sound.musicMuted);
+  $('musicBtn').textContent = Sound.musicMuted ? 'Music: off' : 'Music: on';
+  try { localStorage.setItem('cap-chase-music-off', Sound.musicMuted ? '1' : '0'); } catch (e) { }
+}
+try { if (localStorage.getItem('cap-chase-music-off') === '1') { Sound.musicMuted = true; $('musicBtn').textContent = 'Music: off'; } } catch (e) { }
 
 $('wakeBtn').addEventListener('click', wake);
 $('nextBtn').addEventListener('click', () => {
@@ -118,6 +127,9 @@ $('endMenuBtn').addEventListener('click', goTitle);
 $('resumeBtn').addEventListener('click', resume);
 $('quitBtn').addEventListener('click', goTitle);
 $('muteBtn').addEventListener('click', e => { Sound.init(); toggleMute(); e.currentTarget.blur(); });
+$('musicBtn').addEventListener('click', e => { Sound.init(); toggleMusic(); e.currentTarget.blur(); });
+// The very first click anywhere is enough to let the music start on the title screen.
+window.addEventListener('pointerdown', () => Sound.init());
 $('pauseBtn').addEventListener('click', e => { pause(); e.currentTarget.blur(); });
 
 // ---------- The loop ----------
@@ -125,6 +137,7 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.033, (now - last) / 1000); last = now;
   update(dt);
+  Ambience.update(dt);
   syncScene(dt);
   renderer.render(scene, camera);
   drawHUD();
