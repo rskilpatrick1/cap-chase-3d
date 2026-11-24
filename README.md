@@ -127,5 +127,7 @@ Then open http://localhost:8796/. Keep the source files plain ASCII: some server
 - **Adding a place:** add one object to `LEVELS` in `js/levels.js`, with a `bigTree(x, y)` for the
   nap. Any kind of thing already used (trees, houses, stalls, water, bridges, ramps...) just works.
   A brand-new kind needs a solid rule in `prepareLevel` (rules.js) and a builder in `BUILD` (world3d.js).
-- **Publishing:** commit and push to `main`. GitHub Pages rebuilds the site by itself, usually
-  within a minute or two.
+- **Publishing:** first change the version tag on every script in `index.html` (the `?v=2026-11-24`
+  part) to today's date. GitHub tells browsers to keep files for up to 10 minutes, and without a new
+  tag a browser can mix old and new files, which can stop the game from starting. Then commit and push
+  to `main`. GitHub Pages rebuilds the site by itself, usually within a minute or two.
