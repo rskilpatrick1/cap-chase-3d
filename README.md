@@ -6,7 +6,7 @@ back, and stack all ten on his head. Three places, each with its own landmarks a
 
 ## Play
 
-**https://rskilpatrick1.github.io/cap-chase/**
+**https://rskilpatrick1.github.io/cap-chase-3d/**
 
 Works in any desktop browser with a keyboard. No login, nothing to install.
 
